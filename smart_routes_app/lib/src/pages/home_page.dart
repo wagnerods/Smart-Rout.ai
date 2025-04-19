@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:smart_routes_app/src/pages/profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -145,13 +147,48 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Smart Routes')),
       drawer: Drawer(
+        backgroundColor: Colors.white,
         child: ListView(
-          children: const [
-            DrawerHeader(child: Text('Menu Lateral')),
-            ListTile(title: Text('Item 1')),
+          padding: EdgeInsets.zero,
+          children: [
+            UserAccountsDrawerHeader(
+              decoration: const BoxDecoration(color: Colors.purple),
+              currentAccountPicture: const CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person, size: 40, color: Colors.purple),
+              ),
+              accountName: Text(
+                FirebaseAuth.instance.currentUser?.displayName ?? 'Usuário',
+                style: const TextStyle(fontSize: 18),
+              ),
+              accountEmail: Text(
+                FirebaseAuth.instance.currentUser?.email ?? '',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Perfil'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Sair'),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              },
+            ),
           ],
         ),
-      ),
+      ),   // <-- Aqui agora usa o nosso novo Drawer!
       body: _currentPosition == null
           ? const Center(child: CircularProgressIndicator())
           : Stack(

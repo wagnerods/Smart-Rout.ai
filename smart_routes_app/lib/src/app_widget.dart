@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:smart_routes_app/src/pages/login_page.dart';
 import 'package:smart_routes_app/src/pages/home_page.dart';
 import 'package:smart_routes_app/src/pages/add_address_page.dart'; // (ainda deixamos se quiser)
-import 'package:smart_routes_app/src/pages/add_stops_page.dart'; // << NOVA importação!
+import 'package:smart_routes_app/src/pages/add_stops_page.dart';
+import 'package:smart_routes_app/src/pages/profile_page.dart'; // << NOVA importação!
 
 class AppWidget extends StatelessWidget {
   const AppWidget({super.key});
@@ -20,7 +21,8 @@ class AppWidget extends StatelessWidget {
       '/': (context) => const LoginPage(),
       '/home': (context) => const HomePage(),
       '/addAddress': (context) => const AddAddressPage(),
-      '/addStops': (context) => const AddStopsPage(), // <- REGISTRADO AQUI
+      '/addStops': (context) => const AddStopsPage(),
+      '/profile': (context) => const ProfilePage(), // <- REGISTRADO AQUI
       },
       onGenerateRoute: (settings) {
         // Aqui você pode adicionar lógica para rotas dinâmicas, se necessário
