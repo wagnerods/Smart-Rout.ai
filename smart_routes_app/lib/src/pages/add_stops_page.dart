@@ -156,9 +156,13 @@ class _AddStopsPageState extends State<AddStopsPage> {
         });
       }
 
-      final rotaOtimizada = _otimizarParadas(_stops, _stops[0]['latitude'], _stops[0]['longitude']);
+      // Captura a localização atual
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
 
-      Navigator.pop(context, rotaOtimizada);
+      // Otimizar com base na posição atual
+      final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
+
+      Navigator.pop(context, rotaOtimizada); // Retorna a lista otimizada para a home
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
