@@ -1,12 +1,11 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:smart_routes_app/sevices/geocoding_service.dart';
-import 'dart:math';
-
 import 'package:smart_routes_app/sevices/viacep_service.dart';
 
 class AddStopsPage extends StatefulWidget {
@@ -70,7 +69,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
   }
 
   double _calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
-    const double raioTerra = 6371; // km
+    const double raioTerra = 6371;
     final dLat = _deg2rad(lat2 - lat1);
     final dLon = _deg2rad(lon2 - lon1);
 
@@ -157,10 +156,9 @@ class _AddStopsPageState extends State<AddStopsPage> {
         });
       }
 
-      // Otimizar as paradas
       final rotaOtimizada = _otimizarParadas(_stops, _stops[0]['latitude'], _stops[0]['longitude']);
 
-      Navigator.pop(context, rotaOtimizada); // Retorna a lista otimizada para a home
+      Navigator.pop(context, rotaOtimizada);
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -210,10 +208,28 @@ class _AddStopsPageState extends State<AddStopsPage> {
                 itemCount: _stops.length,
                 itemBuilder: (context, index) {
                   final stop = _stops[index];
-                  return ListTile(
-                    leading: const Icon(Icons.location_on),
-                    title: Text(stop['endereco']),
-                    subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
+                  return Dismissible(
+                    key: Key(stop['cep'] + index.toString()),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Colors.redAccent,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    onDismissed: (_) {
+                      setState(() {
+                        _stops.removeAt(index);
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Parada removida!')),
+                      );
+                    },
+                    child: ListTile(
+                      leading: const Icon(Icons.location_on),
+                      title: Text(stop['endereco']),
+                      subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
+                    ),
                   );
                 },
               ),
