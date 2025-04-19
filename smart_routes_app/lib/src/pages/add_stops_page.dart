@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:smart_routes_app/sevices/geocoding_service.dart';
 import 'package:smart_routes_app/sevices/viacep_service.dart';
 
@@ -30,9 +33,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     final endereco = await ViaCepService.buscarEnderecoPorCep(cep);
 
@@ -63,9 +64,43 @@ class _AddStopsPageState extends State<AddStopsPage> {
       );
     }
 
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _tirarFotoEOCR() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.camera);
+
+    if (pickedFile == null) return;
+
+    final inputImage = InputImage.fromFile(File(pickedFile.path));
+    final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+
+    String? cepEncontrado;
+    for (TextBlock block in recognizedText.blocks) {
+      for (TextLine line in block.lines) {
+        final texto = line.text.replaceAll(RegExp(r'[^0-9]'), '');
+        if (texto.length == 8) {
+          cepEncontrado = texto;
+          break;
+        }
+      }
+      if (cepEncontrado != null) break;
+    }
+
+    if (cepEncontrado != null) {
+      setState(() {
+        _cepController.text = cepEncontrado!;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('CEP detectado: $cepEncontrado')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível detectar o CEP.')),
+      );
+    }
   }
 
   double _calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
@@ -131,9 +166,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -156,22 +189,18 @@ class _AddStopsPageState extends State<AddStopsPage> {
         });
       }
 
-      // Captura a localização atual
       final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
 
-      // Otimizar com base na posição atual
       final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
 
-      Navigator.pop(context, rotaOtimizada); // Retorna a lista otimizada para a home
+      Navigator.pop(context, rotaOtimizada);
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao salvar ou otimizar: $e')),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -200,9 +229,18 @@ class _AddStopsPageState extends State<AddStopsPage> {
                 const SizedBox(width: 8),
                 _isLoading
                     ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator())
-                    : ElevatedButton(
-                        onPressed: _buscarCep,
-                        child: const Text('Adicionar'),
+                    : Row(
+                        children: [
+                          ElevatedButton(
+                            onPressed: _buscarCep,
+                            child: const Text('Adicionar'),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            onPressed: _tirarFotoEOCR,
+                            icon: const Icon(Icons.camera_alt),
+                          ),
+                        ],
                       ),
               ],
             ),
