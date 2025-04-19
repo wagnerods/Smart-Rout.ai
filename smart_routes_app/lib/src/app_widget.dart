@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:smart_routes_app/src/pages/login_page.dart';
 import 'package:smart_routes_app/src/pages/home_page.dart';
-import 'package:smart_routes_app/src/pages/add_address_page.dart'; // (ainda deixamos se quiser)
 import 'package:smart_routes_app/src/pages/add_stops_page.dart';
 import 'package:smart_routes_app/src/pages/profile_page.dart'; // << NOVA importação!
 
@@ -19,8 +18,7 @@ class AppWidget extends StatelessWidget {
       initialRoute: '/',
       routes: {
       '/': (context) => const LoginPage(),
-      '/home': (context) => const HomePage(),
-      '/addAddress': (context) => const AddAddressPage(),
+      '/home': (context) => const HomePage(),      
       '/addStops': (context) => const AddStopsPage(),
       '/profile': (context) => const ProfilePage(), // <- REGISTRADO AQUI
       },

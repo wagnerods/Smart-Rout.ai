@@ -23,9 +23,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
   final List<Map<String, dynamic>> _stops = [];
   bool _isLoading = false;
 
-  Future<void> _buscarCep() async {
-    final cep = _cepController.text.trim();
-
+  Future<void> _buscarCep(String cep, {String? numeroResidencia}) async {
     if (cep.length != 8 || int.tryParse(cep) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('CEP inválido! Digite 8 números.')),
@@ -38,8 +36,8 @@ class _AddStopsPageState extends State<AddStopsPage> {
     final endereco = await ViaCepService.buscarEnderecoPorCep(cep);
 
     if (endereco != null) {
-      final enderecoCompleto =
-          '${endereco['logradouro']}, ${endereco['bairro']}, ${endereco['localidade']} - ${endereco['uf']}';
+      String enderecoCompleto =
+          '${endereco['logradouro']}${numeroResidencia != null ? ", $numeroResidencia" : ''}, ${endereco['bairro']}, ${endereco['localidade']} - ${endereco['uf']}';
 
       final location = await GeocodingService.buscarCoordenadas(enderecoCompleto);
 
@@ -78,29 +76,50 @@ class _AddStopsPageState extends State<AddStopsPage> {
     final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
 
     String? cepEncontrado;
+    String? numeroEncontrado;
+
     for (TextBlock block in recognizedText.blocks) {
       for (TextLine line in block.lines) {
-        final texto = line.text.replaceAll(RegExp(r'[^0-9]'), '');
-        if (texto.length == 8) {
-          cepEncontrado = texto;
-          break;
+        final textoLimpo = line.text.replaceAll(RegExp(r'[^0-9]'), '');
+        if (textoLimpo.length == 8 && cepEncontrado == null) {
+          cepEncontrado = textoLimpo;
+        } else if (textoLimpo.length >= 1 && textoLimpo.length <= 5 && numeroEncontrado == null) {
+          numeroEncontrado = textoLimpo;
         }
       }
-      if (cepEncontrado != null) break;
     }
 
     if (cepEncontrado != null) {
-      setState(() {
-        _cepController.text = cepEncontrado!;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('CEP detectado: $cepEncontrado')),
-      );
+      bool confirmar = await _mostrarDialogConfirmacao(cepEncontrado, numeroEncontrado);
+      if (confirmar) {
+        await _buscarCep(cepEncontrado, numeroResidencia: numeroEncontrado);
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível detectar o CEP.')),
       );
     }
+  }
+
+  Future<bool> _mostrarDialogConfirmacao(String cep, String? numero) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Confirmação'),
+            content: Text('Detectei o CEP: $cep\nNúmero: ${numero ?? "não detectado"}\nDeseja adicionar?'),
+            actions: [
+              TextButton(
+                child: const Text('Cancelar'),
+                onPressed: () => Navigator.pop(context, false),
+              ),
+              TextButton(
+                child: const Text('Confirmar'),
+                onPressed: () => Navigator.pop(context, true),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   double _calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
@@ -190,7 +209,6 @@ class _AddStopsPageState extends State<AddStopsPage> {
       }
 
       final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-
       final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
 
       Navigator.pop(context, rotaOtimizada);
@@ -232,7 +250,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
                     : Row(
                         children: [
                           ElevatedButton(
-                            onPressed: _buscarCep,
+                            onPressed: () => _buscarCep(_cepController.text.trim()),
                             child: const Text('Adicionar'),
                           ),
                           const SizedBox(width: 4),

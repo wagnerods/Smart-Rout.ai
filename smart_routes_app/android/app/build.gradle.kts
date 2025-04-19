@@ -7,9 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.smart_routes_app"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    namespace = "com.example.smart_routes_app"    
     compileSdk = 35
     ndkVersion = "27.0.12077973"
 
@@ -27,10 +25,10 @@ android {
         applicationId = "com.example.smart_routes_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        minSdk = 34
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
         applicationId = "com.smartroutes.app" // seu package
         minSdk = 24
         targetSdk = 35
@@ -38,10 +36,18 @@ android {
         versionName = "1.0"
     }
 
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                file("proguard-rules.pro")
+            )
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -55,8 +61,12 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
-    // (Flutter usa isso por baixo dos plugins também)
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.core:core-splashscreen:1.0.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
+
 kotlin {
     jvmToolchain(17)
 }
