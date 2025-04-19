@@ -3,12 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -17,9 +15,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   GoogleMapController? _mapController;
   LatLng? _currentPosition;
+  List<LatLng> _stops = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
-  List<Map<String, dynamic>> _stops = [];
 
   @override
   void initState() {
@@ -49,45 +47,47 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-
+    final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
     setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
     });
   }
 
-  Future<void> _irParaAddStopsPage() async {
+  Future<void> _navigateToAddStops() async {
     final result = await Navigator.pushNamed(context, '/addStops');
-
     if (result != null && result is List<Map<String, dynamic>>) {
-      _stops = result;
-      _mostrarParadasNoMapa();
-      _tracarRotasComGoogleDirections();
+      List<LatLng> loadedStops = result
+          .map((stop) => LatLng(stop['latitude'] as double, stop['longitude'] as double))
+          .toList();
+      setState(() {
+        _stops = loadedStops;
+      });
+      _drawMarkers();
+      _drawRoute();
     }
   }
 
-  void _mostrarParadasNoMapa() {
-    if (_currentPosition == null) return;
-
-    Set<Marker> newMarkers = {
-      Marker(
-        markerId: const MarkerId('start'),
-        position: _currentPosition!,
-        infoWindow: const InfoWindow(title: 'Você está aqui'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      )
-    };
+  void _drawMarkers() {
+    Set<Marker> newMarkers = {};
 
     for (int i = 0; i < _stops.length; i++) {
-      final stop = _stops[i];
       newMarkers.add(
         Marker(
           markerId: MarkerId('stop_$i'),
-          position: LatLng(stop['latitude'], stop['longitude']),
-          infoWindow: InfoWindow(title: '${i + 1} - ${stop['endereco']}'),
-          icon: BitmapDescriptor.defaultMarker,
+          position: _stops[i],
+          infoWindow: InfoWindow(title: '${i + 1} - Parada'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+        ),
+      );
+    }
+
+    if (_currentPosition != null) {
+      newMarkers.add(
+        Marker(
+          markerId: const MarkerId('current_location'),
+          position: _currentPosition!,
+          infoWindow: const InfoWindow(title: 'Você está aqui'),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         ),
       );
     }
@@ -97,68 +97,47 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _tracarRotasComGoogleDirections() async {
+  void _drawRoute() {
     if (_currentPosition == null || _stops.isEmpty) return;
 
-    final apiKey = 'AIzaSyDIzvJPnyFN8eUJGBiUR4KlOx6V2THwQkM';
-    final waypoints = _stops.map((e) => '${e['latitude']},${e['longitude']}').join('|');
+    List<LatLng> fullPath = [_currentPosition!, ..._stops];
 
-    final url = Uri.parse(
-      'https://maps.googleapis.com/maps/api/directions/json?origin=${_currentPosition!.latitude},${_currentPosition!.longitude}&destination=${_stops.last['latitude']},${_stops.last['longitude']}&waypoints=$waypoints&key=$apiKey',
+    final polyline = Polyline(
+      polylineId: const PolylineId('route'),
+      color: Colors.purple,
+      width: 5,
+      points: fullPath,
     );
 
-    final response = await http.get(url);
-
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-
-      if (data['routes'].isNotEmpty) {
-        final points = data['routes'][0]['overview_polyline']['points'];
-        final List<LatLng> polylineCoordinates = _decodePolyline(points);
-
-        setState(() {
-          _polylines = {
-            Polyline(
-              polylineId: const PolylineId('route'),
-              points: polylineCoordinates,
-              width: 5,
-              color: Colors.blue,
-            )
-          };
-        });
-      }
-    }
+    setState(() {
+      _polylines = {polyline};
+    });
   }
 
-  List<LatLng> _decodePolyline(String encoded) {
-    List<LatLng> points = [];
-    int index = 0, len = encoded.length;
-    int lat = 0, lng = 0;
+  Future<void> _startNavigation() async {
+    if (_currentPosition == null || _stops.isEmpty) return;
 
-    while (index < len) {
-      int b, shift = 0, result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lat += dlat;
+    String origin = '${_currentPosition!.latitude},${_currentPosition!.longitude}';
+    String destination = '${_stops.last.latitude},${_stops.last.longitude}';
 
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lng += dlng;
-
-      points.add(LatLng(lat / 1e5, lng / 1e5));
+    String waypoints = '';
+    if (_stops.length > 1) {
+      waypoints = _stops.sublist(0, _stops.length - 1)
+          .map((stop) => '${stop.latitude},${stop.longitude}')
+          .join('|');
     }
 
-    return points;
+    final url = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination&waypoints=$waypoints&travelmode=driving',
+    );
+
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível iniciar o Google Maps.')),
+      );
+    }
   }
 
   @override
@@ -175,25 +154,54 @@ class _HomePageState extends State<HomePage> {
       ),
       body: _currentPosition == null
           ? const Center(child: CircularProgressIndicator())
-          : GoogleMap(
-              padding: const EdgeInsets.only(bottom: 80), // <-- Corrigido aqui
-              initialCameraPosition: CameraPosition(
-                target: _currentPosition!,
-                zoom: 15,
-              ),
-              myLocationEnabled: true,
-              markers: _markers,
-              polylines: _polylines,
-              onMapCreated: (controller) {
-                _mapController = controller;
-              },
+          : Stack(
+              children: [
+                GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: _currentPosition!,
+                    zoom: 14,
+                  ),
+                  markers: _markers,
+                  polylines: _polylines,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                  },
+                ),
+                Positioned(
+                  bottom: 20,
+                  left: 20,
+                  right: 20,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (_stops.isNotEmpty)
+                        ElevatedButton.icon(
+                          onPressed: _startNavigation,
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('Iniciar Navegação'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ElevatedButton.icon(
+                        onPressed: _navigateToAddStops,
+                        icon: const Icon(Icons.add_location_alt),
+                        label: const Text('Adicionar Parada'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple.shade200,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _irParaAddStopsPage,
-        label: const Text('Adicionar Parada'),
-        icon: const Icon(Icons.add_location_alt),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
