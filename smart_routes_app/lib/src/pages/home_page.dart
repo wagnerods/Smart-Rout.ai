@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -20,6 +19,9 @@ class _HomePageState extends State<HomePage> {
   List<LatLng> _stops = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
+
+  final Color mainButtonColor = const Color(0xFF64B5F6); // Azul claro bonito
+  final Color secondaryButtonColor = const Color(0xFF90CAF9); // Azul ainda mais clarinho
 
   @override
   void initState() {
@@ -78,7 +80,7 @@ class _HomePageState extends State<HomePage> {
           markerId: MarkerId('stop_$i'),
           position: _stops[i],
           infoWindow: InfoWindow(title: '${i + 1} - Parada'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         ),
       );
     }
@@ -106,7 +108,7 @@ class _HomePageState extends State<HomePage> {
 
     final polyline = Polyline(
       polylineId: const PolylineId('route'),
-      color: Colors.purple,
+      color: mainButtonColor,
       width: 5,
       points: fullPath,
     );
@@ -145,27 +147,29 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Smart Routes')),
+      appBar: AppBar(title: const Text('NextStop')),
       drawer: Drawer(
         backgroundColor: Colors.white,
-        child: StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
-          builder: (context, snapshot) {
-            final user = snapshot.data;
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            Builder(
+              builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
 
-            return ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                Container(
+                return Container(
                   padding: const EdgeInsets.symmetric(vertical: 32),
                   alignment: Alignment.center,
-                  color: Colors.purple,
+                  color: mainButtonColor,
                   child: Column(
                     children: [
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 40,
                         backgroundColor: Colors.white,
-                        child: Icon(Icons.person, size: 40, color: Colors.purple),
+                        backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
+                        child: user?.photoURL == null
+                            ? const Icon(Icons.person, size: 40, color: Colors.blue)
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -178,33 +182,33 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: const Text('Perfil'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfilePage()),
-                    );
-                  },
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Sair'),
-                  onTap: () async {
-                    await FirebaseAuth.instance.signOut();
-                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-                  },
-                ),
-              ],
-            );
-          },
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Perfil'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Sair'),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              },
+            ),
+          ],
         ),
-      ),   // <-- Aqui agora usa o nosso novo Drawer!
+      ),
       body: _currentPosition == null
           ? const Center(child: CircularProgressIndicator())
           : Stack(
@@ -223,33 +227,40 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 Positioned(
-                  bottom: 20,
+                  bottom: 150,
                   left: 20,
                   right: 20,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      ElevatedButton.icon(
+                        onPressed: _navigateToAddStops,
+                        icon: const Icon(Icons.add_location_alt),
+                        label: const Text('Adicionar Parada'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF64B5F6), // Azul claro
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 40),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 6,
+                          shadowColor: Colors.black45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       if (_stops.isNotEmpty)
                         ElevatedButton.icon(
                           onPressed: _startNavigation,
                           icon: const Icon(Icons.navigation),
                           label: const Text('Iniciar Navegação'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple,
+                            backgroundColor: const Color(0xFF1E88E5), // Um azul um pouco mais forte para diferenciar
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            minimumSize: const Size(double.infinity, 40),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 6,
+                            shadowColor: Colors.black45,
                           ),
                         ),
-                      ElevatedButton.icon(
-                        onPressed: _navigateToAddStops,
-                        icon: const Icon(Icons.add_location_alt),
-                        label: const Text('Adicionar Parada'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple.shade200,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                      ),
                     ],
                   ),
                 ),
