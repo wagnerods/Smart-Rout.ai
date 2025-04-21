@@ -122,6 +122,102 @@ class _AddStopsPageState extends State<AddStopsPage> {
         false;
   }
 
+  Future<void> _editarParada(int index) async {
+    final stop = _stops[index];
+    final TextEditingController editController = TextEditingController(text: stop['endereco']);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Endereço'),
+        content: TextField(
+          controller: editController,
+          decoration: const InputDecoration(
+            labelText: 'Novo Endereço',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, editController.text.trim()),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() => _isLoading = true);
+
+      final location = await GeocodingService.buscarCoordenadas(result);
+
+      if (location != null) {
+        setState(() {
+          _stops[index]['endereco'] = result;
+          _stops[index]['latitude'] = location.latitude;
+          _stops[index]['longitude'] = location.longitude;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Parada atualizada com sucesso!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível localizar o novo endereço.')),
+        );
+      }
+
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _salvarEOtimizar() async {
+    if (_stops.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Adicione pelo menos um CEP.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usuário não logado!')),
+        );
+        return;
+      }
+
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+      for (var stop in _stops) {
+        await userDoc.collection('addresses').add({
+          'cep': stop['cep'],
+          'endereco': stop['endereco'],
+          'latitude': stop['latitude'],
+          'longitude': stop['longitude'],
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
+
+      Navigator.pop(context, rotaOtimizada);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao salvar ou otimizar: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   double _calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
     const double raioTerra = 6371;
     final dLat = _deg2rad(lat2 - lat1);
@@ -175,51 +271,6 @@ class _AddStopsPageState extends State<AddStopsPage> {
     }
 
     return ordenadas;
-  }
-
-  Future<void> _salvarEOtimizar() async {
-    if (_stops.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Adicione pelo menos um CEP.')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Usuário não logado!')),
-        );
-        return;
-      }
-
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-
-      for (var stop in _stops) {
-        await userDoc.collection('addresses').add({
-          'cep': stop['cep'],
-          'endereco': stop['endereco'],
-          'latitude': stop['latitude'],
-          'longitude': stop['longitude'],
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
-
-      Navigator.pop(context, rotaOtimizada);
-
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao salvar ou otimizar: $e')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
   }
 
   @override
@@ -289,6 +340,10 @@ class _AddStopsPageState extends State<AddStopsPage> {
                       leading: const Icon(Icons.location_on),
                       title: Text(stop['endereco']),
                       subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _editarParada(index),
+                      ),
                     ),
                   );
                 },
