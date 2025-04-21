@@ -1,8 +1,9 @@
-import 'dart:async';
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:smart_routes_app/src/pages/profile_page.dart';
 
@@ -20,13 +21,27 @@ class _HomePageState extends State<HomePage> {
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
 
-  final Color mainButtonColor = const Color(0xFF64B5F6); // Azul claro bonito
-  final Color secondaryButtonColor = const Color(0xFF90CAF9); // Azul ainda mais clarinho
+  final Color mainButtonColor = const Color(0xFF64B5F6);
+  File? _localImage;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imagePath = prefs.getString('profile_image_path');
+    if (imagePath != null) {
+      final file = File(imagePath);
+      if (await file.exists()) {
+        setState(() {
+          _localImage = file;
+        });
+      }
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -146,6 +161,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: AppBar(title: const Text('NextStop')),
       drawer: Drawer(
@@ -153,48 +170,45 @@ class _HomePageState extends State<HomePage> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            Builder(
-              builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-
-                return Container(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  alignment: Alignment.center,
-                  color: mainButtonColor,
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Colors.white,
-                        backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
-                        child: user?.photoURL == null
-                            ? const Icon(Icons.person, size: 40, color: Colors.blue)
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        user?.displayName ?? 'Usuário',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                      ),
-                      Text(
-                        user?.email ?? '',
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                    ],
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              alignment: Alignment.center,
+              color: mainButtonColor,
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Colors.white,
+                    backgroundImage: _localImage != null
+                        ? FileImage(_localImage!)
+                        : null,
+                    child: _localImage == null
+                        ? const Icon(Icons.person, size: 40, color: Colors.blue)
+                        : null,
                   ),
-                );
-              },
+                  const SizedBox(height: 12),
+                  Text(
+                    user?.displayName ?? 'Usuário',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                  ),
+                  Text(
+                    user?.email ?? '',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text('Perfil'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                Navigator.push(
+                await Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ProfilePage()),
                 );
+                await _loadProfileImage(); // Atualiza imagem ao voltar
               },
             ),
             const Divider(),
@@ -238,7 +252,7 @@ class _HomePageState extends State<HomePage> {
                         icon: const Icon(Icons.add_location_alt),
                         label: const Text('Adicionar Parada'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF64B5F6), // Azul claro
+                          backgroundColor: mainButtonColor,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 40),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -253,7 +267,7 @@ class _HomePageState extends State<HomePage> {
                           icon: const Icon(Icons.navigation),
                           label: const Text('Iniciar Navegação'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E88E5), // Um azul um pouco mais forte para diferenciar
+                            backgroundColor: const Color(0xFF1E88E5),
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 40),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
