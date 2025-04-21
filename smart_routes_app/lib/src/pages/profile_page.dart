@@ -60,20 +60,17 @@ class _ProfilePageState extends State<ProfilePage> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
     if (pickedFile != null) {
-      final directory = await getApplicationDocumentsDirectory();
-      final path = directory.path;
-      final fileName = 'profile_${user!.uid}.jpg';
-      final File localImage = await File(pickedFile.path).copy('$path/$fileName');
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile_image_path', localImage.path);
+      final file = File(pickedFile.path);
 
       setState(() {
-        _localImage = localImage;
+        _localImage = file;
       });
 
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image_path', pickedFile.path);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto salva localmente!')),
+        const SnackBar(content: Text('Foto de perfil atualizada!')),
       );
     }
   }
