@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -20,7 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   User? user;
   bool _isLoading = false;
   bool _isPasswordValidated = false;
-  String? _photoURL;
+  File? _localImage;
 
   @override
   void initState() {
@@ -28,11 +29,30 @@ class _ProfilePageState extends State<ProfilePage> {
     user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       _nameController.text = user!.displayName ?? '';
-      _photoURL = user!.photoURL;
     }
     _newPasswordController.addListener(() {
-      setState(() {}); // Atualiza tela quando digita nova senha
+      setState(() {});
     });
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imagePath = prefs.getString('profile_image_path');
+    if (imagePath != null) {
+      final file = File(imagePath);
+      if (await file.exists()) {
+        setState(() {
+          _localImage = file;
+        });
+      } else {
+        // Arquivo local não existe (ex: mudou de aparelho), então remove o registro salvo
+        await prefs.remove('profile_image_path');
+        setState(() {
+          _localImage = null;
+        });
+      }
+    }
   }
 
   Future<void> _pickImage() async {
@@ -40,28 +60,21 @@ class _ProfilePageState extends State<ProfilePage> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
     if (pickedFile != null) {
-      try {
-        final file = File(pickedFile.path);
-        final storageRef = FirebaseStorage.instance.ref().child('profile_pictures/${user!.uid}.jpg');
-        await storageRef.putFile(file);
-        final downloadURL = await storageRef.getDownloadURL();
+      final directory = await getApplicationDocumentsDirectory();
+      final path = directory.path;
+      final fileName = 'profile_${user!.uid}.jpg';
+      final File localImage = await File(pickedFile.path).copy('$path/$fileName');
 
-        await user!.updatePhotoURL(downloadURL);
-        await user!.reload();
-        user = FirebaseAuth.instance.currentUser;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image_path', localImage.path);
 
-        setState(() {
-          _photoURL = downloadURL;
-        });
+      setState(() {
+        _localImage = localImage;
+      });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto de perfil atualizada!')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao atualizar foto: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto salva localmente!')),
+      );
     }
   }
 
@@ -198,8 +211,10 @@ class _ProfilePageState extends State<ProfilePage> {
               child: CircleAvatar(
                 radius: 50,
                 backgroundColor: const Color(0xFF90CAF9),
-                backgroundImage: _photoURL != null ? NetworkImage(_photoURL!) : null,
-                child: _photoURL == null
+                backgroundImage: _localImage != null
+                    ? FileImage(_localImage!)
+                    : null,
+                child: _localImage == null
                     ? const Icon(Icons.person, size: 60, color: Colors.white)
                     : null,
               ),
