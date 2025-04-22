@@ -76,6 +76,40 @@ class _AddStopsPageState extends State<AddStopsPage> {
 
     setState(() => _isLoading = false);
   }
+  Future<void> _editarParada(int index) async {
+    TextEditingController enderecoController = TextEditingController(text: _stops[index]['endereco']);
+
+    bool? confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Endereço'),
+        content: TextField(
+          controller: enderecoController,
+          decoration: const InputDecoration(labelText: 'Novo Endereço'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado == true && enderecoController.text.trim().isNotEmpty) {
+      setState(() {
+        _stops[index]['endereco'] = enderecoController.text.trim();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Endereço atualizado com sucesso!')),
+      );
+    }
+  }
 
   Future<void> _tirarFotoEOCR() async {
     final picker = ImagePicker();
@@ -270,6 +304,10 @@ class _AddStopsPageState extends State<AddStopsPage> {
                       leading: const Icon(Icons.location_on),
                       title: Text(stop['endereco'] ?? 'Sem endereço disponível'),
                       subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _editarParada(index),
+                      ),
                     ),
                   );
                 },
