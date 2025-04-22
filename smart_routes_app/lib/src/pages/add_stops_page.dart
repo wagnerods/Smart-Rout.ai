@@ -1,18 +1,16 @@
-import 'dart:convert';
-import 'dart:math';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:smart_routes_app/sevices/geocoding_service.dart';
 import 'package:smart_routes_app/sevices/viacep_service.dart';
 
 class AddStopsPage extends StatefulWidget {
-  const AddStopsPage({super.key});
+  final List<Map<String, dynamic>> existingStops;
+
+  const AddStopsPage({super.key, this.existingStops = const []});
 
   @override
   State<AddStopsPage> createState() => _AddStopsPageState();
@@ -20,8 +18,15 @@ class AddStopsPage extends StatefulWidget {
 
 class _AddStopsPageState extends State<AddStopsPage> {
   final TextEditingController _cepController = TextEditingController();
-  final List<Map<String, dynamic>> _stops = [];
+  final Color mainButtonColor = const Color(0xFF64B5F6);
+  late List<Map<String, dynamic>> _stops;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _stops = List<Map<String, dynamic>>.from(widget.existingStops);
+  }
 
   Future<void> _buscarCep(String cep, {String? numeroResidencia}) async {
     if (cep.length != 8 || int.tryParse(cep) == null) {
@@ -73,7 +78,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
 
     final inputImage = InputImage.fromFile(File(pickedFile.path));
     final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-    final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+    final recognizedText = await textRecognizer.processImage(inputImage);
 
     String? cepEncontrado;
     String? numeroEncontrado;
@@ -122,101 +127,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
         false;
   }
 
-  Future<void> _editarParada(int index) async {
-    final stop = _stops[index];
-    final TextEditingController editController = TextEditingController(text: stop['endereco']);
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar Endereço'),
-        content: TextField(
-          controller: editController,
-          decoration: const InputDecoration(
-            labelText: 'Novo Endereço',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, editController.text.trim()),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && result.isNotEmpty) {
-      setState(() => _isLoading = true);
-
-      final location = await GeocodingService.buscarCoordenadas(result);
-
-      if (location != null) {
-        setState(() {
-          _stops[index]['endereco'] = result;
-          _stops[index]['latitude'] = location.latitude;
-          _stops[index]['longitude'] = location.longitude;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Parada atualizada com sucesso!')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível localizar o novo endereço.')),
-        );
-      }
-
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _salvarEOtimizar() async {
-    if (_stops.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Adicione pelo menos um CEP.')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Usuário não logado!')),
-        );
-        return;
-      }
-
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-
-      for (var stop in _stops) {
-        await userDoc.collection('addresses').add({
-          'cep': stop['cep'],
-          'endereco': stop['endereco'],
-          'latitude': stop['latitude'],
-          'longitude': stop['longitude'],
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
-
-      Navigator.pop(context, rotaOtimizada);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao salvar ou otimizar: $e')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
+  double _deg2rad(double deg) => deg * (pi / 180);
 
   double _calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
     const double raioTerra = 6371;
@@ -231,13 +142,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
     return raioTerra * c;
   }
 
-  double _deg2rad(double deg) => deg * (pi / 180);
-
-  List<Map<String, dynamic>> _otimizarParadas(
-    List<Map<String, dynamic>> paradas,
-    double startLat,
-    double startLng,
-  ) {
+  List<Map<String, dynamic>> _otimizarParadas(List<Map<String, dynamic>> paradas, double startLat, double startLng) {
     final List<Map<String, dynamic>> restantes = List.from(paradas);
     final List<Map<String, dynamic>> ordenadas = [];
 
@@ -250,12 +155,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
 
       for (int i = 0; i < restantes.length; i++) {
         final parada = restantes[i];
-        final distancia = _calcularDistancia(
-          latAtual,
-          lngAtual,
-          parada['latitude'],
-          parada['longitude'],
-        );
+        final distancia = _calcularDistancia(latAtual, lngAtual, parada['latitude'], parada['longitude']);
 
         if (distancia < menorDistancia) {
           menorDistancia = distancia;
@@ -271,6 +171,29 @@ class _AddStopsPageState extends State<AddStopsPage> {
     }
 
     return ordenadas;
+  }
+
+  Future<void> _salvarEOtimizar() async {
+    if (_stops.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Adicione pelo menos uma parada.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
+      Navigator.pop(context, rotaOtimizada);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao salvar ou otimizar: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -320,7 +243,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
                 itemBuilder: (context, index) {
                   final stop = _stops[index];
                   return Dismissible(
-                    key: Key(stop['cep'] + index.toString()),
+                    key: Key((stop['cep'] ?? 'lat:${stop['latitude']}_lng:${stop['longitude']}') + index.toString()),
                     direction: DismissDirection.endToStart,
                     background: Container(
                       color: Colors.redAccent,
@@ -338,12 +261,8 @@ class _AddStopsPageState extends State<AddStopsPage> {
                     },
                     child: ListTile(
                       leading: const Icon(Icons.location_on),
-                      title: Text(stop['endereco']),
+                      title: Text(stop['endereco'] ?? 'Sem endereço disponível'),
                       subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _editarParada(index),
-                      ),
                     ),
                   );
                 },
@@ -351,9 +270,38 @@ class _AddStopsPageState extends State<AddStopsPage> {
             ),
             const SizedBox(height: 8),
             ElevatedButton.icon(
+              onPressed: _stops.isEmpty
+                  ? null
+                  : () {
+                      setState(() => _stops.clear());
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Todas as paradas foram removidas!')),
+                      );
+                    },
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('Limpar Paradas'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 6,
+                shadowColor: Colors.black45,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
               onPressed: _isLoading ? null : _salvarEOtimizar,
               icon: const Icon(Icons.map),
               label: const Text('Salvar e Otimizar Rota'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: mainButtonColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 6,
+                shadowColor: Colors.black45,
+              ),
             ),
           ],
         ),

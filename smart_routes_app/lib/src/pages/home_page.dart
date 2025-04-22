@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -17,7 +18,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   GoogleMapController? _mapController;
   LatLng? _currentPosition;
-  List<LatLng> _stops = [];
+  List<Map<String, dynamic>> _stops = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
 
@@ -45,26 +46,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _getCurrentLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) await Geolocator.openLocationSettings();
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return;
-      }
     }
 
-    if (permission == LocationPermission.deniedForever) {
-      return;
-    }
+    if (permission == LocationPermission.deniedForever) return;
 
     final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
     setState(() {
@@ -73,29 +63,76 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _navigateToAddStops() async {
-    final result = await Navigator.pushNamed(context, '/addStops');
-    if (result != null && result is List<Map<String, dynamic>>) {
-      List<LatLng> loadedStops = result
-          .map((stop) => LatLng(stop['latitude'] as double, stop['longitude'] as double))
-          .toList();
+    final result = await Navigator.pushNamed(
+      context,
+      '/addStops',
+      arguments: _stops.map((stop) => {
+        'cep': stop['cep'] ?? '',
+        'endereco': stop['endereco'] ?? '',
+        'latitude': stop['latitude'],
+        'longitude': stop['longitude'],
+      }).toList(),
+    );
+
+    if (result != null && result is List) {
+      List<Map<String, dynamic>> loadedStops = [];
+      for (var item in result) {
+        if (item is Map<String, dynamic> && item.containsKey('latitude') && item.containsKey('longitude')) {
+          loadedStops.add({
+            'cep': item['cep'] ?? '',
+            'endereco': item['endereco'] ?? '',
+            'latitude': item['latitude'],
+            'longitude': item['longitude'],
+          });
+        }
+      }
       setState(() {
         _stops = loadedStops;
       });
-      _drawMarkers();
+      await _drawMarkers();
       _drawRoute();
     }
   }
 
-  void _drawMarkers() {
+  Future<BitmapDescriptor> _createCustomMarker(int number) async {
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+    final Paint paint = Paint()..color = Colors.blueAccent;
+    const double size = 100.0;
+
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, paint);
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: number.toString(),
+        style: const TextStyle(fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset((size - textPainter.width) / 2, (size - textPainter.height) / 2),
+    );
+
+    final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+
+    return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+  }
+
+  Future<void> _drawMarkers() async {
     Set<Marker> newMarkers = {};
 
     for (int i = 0; i < _stops.length; i++) {
+      final markerIcon = await _createCustomMarker(i + 1);
+
       newMarkers.add(
         Marker(
           markerId: MarkerId('stop_$i'),
-          position: _stops[i],
+          position: LatLng(_stops[i]['latitude'], _stops[i]['longitude']),
           infoWindow: InfoWindow(title: '${i + 1} - Parada'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          icon: markerIcon,
         ),
       );
     }
@@ -119,7 +156,10 @@ class _HomePageState extends State<HomePage> {
   void _drawRoute() {
     if (_currentPosition == null || _stops.isEmpty) return;
 
-    List<LatLng> fullPath = [_currentPosition!, ..._stops];
+    List<LatLng> fullPath = [
+      _currentPosition!,
+      ..._stops.map((stop) => LatLng(stop['latitude'], stop['longitude']))
+    ];
 
     final polyline = Polyline(
       polylineId: const PolylineId('route'),
@@ -137,12 +177,12 @@ class _HomePageState extends State<HomePage> {
     if (_currentPosition == null || _stops.isEmpty) return;
 
     String origin = '${_currentPosition!.latitude},${_currentPosition!.longitude}';
-    String destination = '${_stops.last.latitude},${_stops.last.longitude}';
+    String destination = '${_stops.last['latitude']},${_stops.last['longitude']}';
 
     String waypoints = '';
     if (_stops.length > 1) {
       waypoints = _stops.sublist(0, _stops.length - 1)
-          .map((stop) => '${stop.latitude},${stop.longitude}')
+          .map((stop) => '${stop['latitude']},${stop['longitude']}')
           .join('|');
     }
 
@@ -165,64 +205,7 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('NextStop')),
-      drawer: Drawer(
-        backgroundColor: Colors.white,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              alignment: Alignment.center,
-              color: mainButtonColor,
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.white,
-                    backgroundImage: _localImage != null
-                        ? FileImage(_localImage!)
-                        : null,
-                    child: _localImage == null
-                        ? const Icon(Icons.person, size: 40, color: Colors.blue)
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    user?.displayName ?? 'Usuário',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                  ),
-                  Text(
-                    user?.email ?? '',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text('Perfil'),
-              onTap: () async {
-                Navigator.pop(context);
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ProfilePage()),
-                );
-                await _loadProfileImage(); // Atualiza imagem ao voltar
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Sair'),
-              onTap: () async {
-                await FirebaseAuth.instance.signOut();
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: _buildDrawer(user),
       body: _currentPosition == null
           ? const Center(child: CircularProgressIndicator())
           : Stack(
@@ -280,6 +263,65 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
+    );
+  }
+
+  Drawer _buildDrawer(User? user) {
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            alignment: Alignment.center,
+            color: mainButtonColor,
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.white,
+                  backgroundImage: _localImage != null ? FileImage(_localImage!) : null,
+                  child: _localImage == null
+                      ? const Icon(Icons.person, size: 40, color: Colors.blue)
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  user?.displayName ?? 'Usuário',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                Text(
+                  user?.email ?? '',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Perfil'),
+            onTap: () async {
+              Navigator.pop(context);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfilePage()),
+              );
+              await _loadProfileImage();
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Sair'),
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+            },
+          ),
+        ],
+      ),
     );
   }
 }

@@ -3,7 +3,7 @@ import 'package:smart_routes_app/src/pages/login_page.dart';
 import 'package:smart_routes_app/src/pages/home_page.dart';
 import 'package:smart_routes_app/src/pages/add_stops_page.dart';
 import 'package:smart_routes_app/src/pages/profile_page.dart';
-import 'package:smart_routes_app/src/pages/splash_screen.dart'; // <<< Importa a SplashScreen aqui
+import 'package:smart_routes_app/src/pages/splash_screen.dart';
 
 class AppWidget extends StatelessWidget {
   const AppWidget({super.key});
@@ -11,7 +11,7 @@ class AppWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'NextStop', // <<< Já atualizei para o novo nome!
+      title: 'NextStop',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(
@@ -38,15 +38,38 @@ class AppWidget extends StatelessWidget {
           ),
         ),
       ),
-      initialRoute: '/splash', // <<< Agora inicia na Splash
+      initialRoute: '/splash',
       routes: {
-        '/splash': (context) => const SplashScreen(), // <<< Nova rota para Splash
+        '/splash': (context) => const SplashScreen(),
         '/': (context) => const LoginPage(),
         '/home': (context) => const HomePage(),
-        '/addStops': (context) => const AddStopsPage(),
         '/profile': (context) => const ProfilePage(),
       },
       onGenerateRoute: (settings) {
+        if (settings.name == '/addStops') {
+          final args = settings.arguments;
+          List<Map<String, dynamic>> stopsList = [];
+
+          if (args != null) {
+            if (args is List) {
+              for (var item in args) {
+                if (item is Map<String, dynamic>) {
+                  stopsList.add({
+                    'cep': item['cep'] ?? '',
+                    'endereco': item['endereco'] ?? '',
+                    'latitude': item['latitude'],
+                    'longitude': item['longitude'],
+                  });
+                }
+              }
+            }
+          }
+
+          return MaterialPageRoute(
+            builder: (context) => AddStopsPage(existingStops: stopsList),
+          );
+        }
+
         return MaterialPageRoute(
           builder: (context) => const LoginPage(),
         );
