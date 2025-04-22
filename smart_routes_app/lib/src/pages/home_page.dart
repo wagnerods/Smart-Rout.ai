@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:smart_routes_app/src/pages/profile_page.dart';
+import 'package:smart_routes_app/src/services/rota_fatiada_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -21,9 +21,9 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _stops = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
-
   final Color mainButtonColor = const Color(0xFF64B5F6);
   File? _localImage;
+  double _startNavButtonOpacity = 1.0;
 
   @override
   void initState() {
@@ -38,9 +38,7 @@ class _HomePageState extends State<HomePage> {
     if (imagePath != null) {
       final file = File(imagePath);
       if (await file.exists()) {
-        setState(() {
-          _localImage = file;
-        });
+        setState(() => _localImage = file);
       }
     }
   }
@@ -57,9 +55,7 @@ class _HomePageState extends State<HomePage> {
     if (permission == LocationPermission.deniedForever) return;
 
     final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-    });
+    setState(() => _currentPosition = LatLng(position.latitude, position.longitude));
   }
 
   Future<void> _navigateToAddStops() async {
@@ -86,21 +82,19 @@ class _HomePageState extends State<HomePage> {
           });
         }
       }
-      setState(() {
-        _stops = loadedStops;
-      });
+      setState(() => _stops = loadedStops);
       await _drawMarkers();
       _drawRoute();
     }
   }
 
   Future<BitmapDescriptor> _createCustomMarker(int number) async {
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(recorder);
-    final Paint paint = Paint()..color = Colors.blueAccent;
-    const double size = 100.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint()..color = Colors.blueAccent;
+    const size = 100.0;
 
-    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, paint);
+    canvas.drawCircle(const Offset(size/2, size/2), size/2, paint);
 
     final textPainter = TextPainter(
       text: TextSpan(
@@ -110,10 +104,7 @@ class _HomePageState extends State<HomePage> {
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset((size - textPainter.width) / 2, (size - textPainter.height) / 2),
-    );
+    textPainter.paint(canvas, Offset((size - textPainter.width) / 2, (size - textPainter.height) / 2));
 
     final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -126,31 +117,24 @@ class _HomePageState extends State<HomePage> {
 
     for (int i = 0; i < _stops.length; i++) {
       final markerIcon = await _createCustomMarker(i + 1);
-
-      newMarkers.add(
-        Marker(
-          markerId: MarkerId('stop_$i'),
-          position: LatLng(_stops[i]['latitude'], _stops[i]['longitude']),
-          infoWindow: InfoWindow(title: '${i + 1} - Parada'),
-          icon: markerIcon,
-        ),
-      );
+      newMarkers.add(Marker(
+        markerId: MarkerId('stop_$i'),
+        position: LatLng(_stops[i]['latitude'], _stops[i]['longitude']),
+        infoWindow: InfoWindow(title: '${i + 1} - Parada'),
+        icon: markerIcon,
+      ));
     }
 
     if (_currentPosition != null) {
-      newMarkers.add(
-        Marker(
-          markerId: const MarkerId('current_location'),
-          position: _currentPosition!,
-          infoWindow: const InfoWindow(title: 'Você está aqui'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        ),
-      );
+      newMarkers.add(Marker(
+        markerId: const MarkerId('current_location'),
+        position: _currentPosition!,
+        infoWindow: const InfoWindow(title: 'Você está aqui'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ));
     }
 
-    setState(() {
-      _markers = newMarkers;
-    });
+    setState(() => _markers = newMarkers);
   }
 
   void _drawRoute() {
@@ -158,7 +142,7 @@ class _HomePageState extends State<HomePage> {
 
     List<LatLng> fullPath = [
       _currentPosition!,
-      ..._stops.map((stop) => LatLng(stop['latitude'], stop['longitude']))
+      ..._stops.map((stop) => LatLng(stop['latitude'], stop['longitude'])),
     ];
 
     final polyline = Polyline(
@@ -168,35 +152,43 @@ class _HomePageState extends State<HomePage> {
       points: fullPath,
     );
 
-    setState(() {
-      _polylines = {polyline};
-    });
+    setState(() => _polylines = {polyline});
   }
 
-  Future<void> _startNavigation() async {
+  void _clearRoute() async {
+    setState(() => _startNavButtonOpacity = 0.0);
+    await Future.delayed(const Duration(milliseconds: 400));
+    setState(() {
+      _stops.clear();
+      _markers.clear();
+      _polylines.clear();
+      _startNavButtonOpacity = 1.0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Rota limpa!'), backgroundColor: Colors.redAccent),
+    );
+  }
+
+  void _startNavigation() {
     if (_currentPosition == null || _stops.isEmpty) return;
 
-    String origin = '${_currentPosition!.latitude},${_currentPosition!.longitude}';
-    String destination = '${_stops.last['latitude']},${_stops.last['longitude']}';
+    final origem = {
+      'latitude': _currentPosition!.latitude,
+      'longitude': _currentPosition!.longitude,
+    };
 
-    String waypoints = '';
-    if (_stops.length > 1) {
-      waypoints = _stops.sublist(0, _stops.length - 1)
-          .map((stop) => '${stop['latitude']},${stop['longitude']}')
-          .join('|');
-    }
-
-    final url = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination&waypoints=$waypoints&travelmode=driving',
+    final paradas = List<Map<String, double>>.from(
+      _stops.map((stop) => {
+        'latitude': stop['latitude'],
+        'longitude': stop['longitude'],
+      }),
     );
 
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível iniciar o Google Maps.')),
-      );
-    }
+    RotaFatiadaService.iniciarNavegacaoFatiada(
+      context: context,
+      origem: origem,
+      paradas: paradas,
+    );
   }
 
   @override
@@ -211,64 +203,80 @@ class _HomePageState extends State<HomePage> {
           : Stack(
               children: [
                 GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _currentPosition!,
-                    zoom: 14,
-                  ),
+                  initialCameraPosition: CameraPosition(target: _currentPosition!, zoom: 14),
                   markers: _markers,
                   polylines: _polylines,
                   myLocationEnabled: true,
                   myLocationButtonEnabled: true,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
-                  },
+                  onMapCreated: (controller) => _mapController = controller,
                 ),
-                Positioned(
-                  bottom: 150,
-                  left: 20,
-                  right: 20,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _navigateToAddStops,
-                        icon: const Icon(Icons.add_location_alt),
-                        label: const Text('Adicionar Parada'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: mainButtonColor,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 40),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 6,
-                          shadowColor: Colors.black45,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_stops.isNotEmpty)
-                        ElevatedButton.icon(
-                          onPressed: _startNavigation,
-                          icon: const Icon(Icons.navigation),
-                          label: const Text('Iniciar Navegação'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E88E5),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 40),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 6,
-                            shadowColor: Colors.black45,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                _buildBottomControls(),
               ],
             ),
     );
   }
 
+  Widget _buildBottomControls() {
+    return Positioned(
+      bottom: 150,
+      left: 20,
+      right: 20,
+      child: Column(
+        children: [
+          ElevatedButton.icon(
+            onPressed: _navigateToAddStops,
+            icon: const Icon(Icons.add_location_alt),
+            label: Text('Adicionar Parada (${_stops.length})'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: mainButtonColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_stops.isNotEmpty)
+            AnimatedOpacity(
+              opacity: _startNavButtonOpacity,
+              duration: const Duration(milliseconds: 400),
+              child: ElevatedButton.icon(
+                onPressed: _startNavigation,
+                icon: const Icon(Icons.directions),
+                label: Text('Iniciar Navegação (${_stops.length} Paradas)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E88E5),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 40),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 6,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          if (_stops.isNotEmpty)
+            Align(
+              alignment: Alignment.bottomLeft,
+              child: GestureDetector(
+                onTap: _clearRoute,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.redAccent,
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(left: 8, bottom: 8),
+                  child: const Icon(Icons.delete_outline, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Drawer _buildDrawer(User? user) {
     return Drawer(
-      backgroundColor: Colors.white,
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
@@ -280,38 +288,20 @@ class _HomePageState extends State<HomePage> {
               children: [
                 CircleAvatar(
                   radius: 40,
-                  backgroundColor: Colors.white,
                   backgroundImage: _localImage != null ? FileImage(_localImage!) : null,
-                  child: _localImage == null
-                      ? const Icon(Icons.person, size: 40, color: Colors.blue)
-                      : null,
+                  child: _localImage == null ? const Icon(Icons.person, size: 40, color: Colors.blue) : null,
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  user?.displayName ?? 'Usuário',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                ),
-                Text(
-                  user?.email ?? '',
-                  style: const TextStyle(color: Colors.white70),
-                ),
+                Text(user?.displayName ?? 'Usuário', style: const TextStyle(color: Colors.white)),
+                Text(user?.email ?? '', style: const TextStyle(color: Colors.white70)),
               ],
             ),
           ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.person_outline),
             title: const Text('Perfil'),
-            onTap: () async {
-              Navigator.pop(context);
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfilePage()),
-              );
-              await _loadProfileImage();
-            },
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage())),
           ),
-          const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('Sair'),

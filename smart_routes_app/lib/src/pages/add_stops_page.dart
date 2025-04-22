@@ -25,7 +25,14 @@ class _AddStopsPageState extends State<AddStopsPage> {
   @override
   void initState() {
     super.initState();
-    _stops = List<Map<String, dynamic>>.from(widget.existingStops);
+    _stops = widget.existingStops.map((stop) {
+      return {
+        'cep': stop['cep'] ?? '',
+        'endereco': stop['endereco'] ?? 'Sem endereço disponível',
+        'latitude': stop['latitude'],
+        'longitude': stop['longitude'],
+      };
+    }).toList();
   }
 
   Future<void> _buscarCep(String cep, {String? numeroResidencia}) async {
@@ -243,7 +250,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
                 itemBuilder: (context, index) {
                   final stop = _stops[index];
                   return Dismissible(
-                    key: Key((stop['cep'] ?? 'lat:${stop['latitude']}_lng:${stop['longitude']}') + index.toString()),
+                    key: Key('${stop['cep']}_${index.toString()}'),
                     direction: DismissDirection.endToStart,
                     background: Container(
                       color: Colors.redAccent,
