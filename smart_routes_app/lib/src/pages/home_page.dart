@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -24,12 +25,18 @@ class _HomePageState extends State<HomePage> {
   final Color mainButtonColor = const Color(0xFF64B5F6);
   File? _localImage;
   double _startNavButtonOpacity = 1.0;
+  StreamSubscription<Position>? _positionStream;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
     _loadProfileImage();
+  }
+  @override
+  void dispose() {
+    _positionStream?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProfileImage() async {
@@ -164,10 +171,12 @@ class _HomePageState extends State<HomePage> {
       _polylines.clear();
       _startNavButtonOpacity = 1.0;
     });
+    _positionStream?.cancel();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Rota limpa!'), backgroundColor: Colors.redAccent),
     );
   }
+  
 
   void _startNavigation() {
     if (_currentPosition == null || _stops.isEmpty) return;
@@ -187,7 +196,11 @@ class _HomePageState extends State<HomePage> {
       origem: origem,
       paradas: paradas,
     );
+    _monitorarParadasVisitadas();
   }
+
+  
+  
 
   @override
   Widget build(BuildContext context) {
@@ -311,5 +324,31 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+  
+  void _monitorarParadasVisitadas() {
+    _positionStream?.cancel();
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(distanceFilter: 20),
+    ).listen((Position pos) {
+      final currentLatLng = LatLng(pos.latitude, pos.longitude);
+
+      final List<Map<String, dynamic>> paradasRestantes = _stops.where((parada) {
+        final LatLng paradaLatLng = LatLng(parada['latitude'], parada['longitude']);
+        final distance = Geolocator.distanceBetween(
+          currentLatLng.latitude,
+          currentLatLng.longitude,
+          paradaLatLng.latitude,
+          paradaLatLng.longitude,
+        );
+        return distance > 20; // se estiver a mais de 20m, ainda é uma parada válida
+      }).toList();
+
+      if (paradasRestantes.length != _stops.length) {
+        setState(() => _stops = paradasRestantes);
+        _drawMarkers();
+        _drawRoute();
+      }
+    });
   }
 }

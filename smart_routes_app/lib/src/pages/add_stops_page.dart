@@ -129,7 +129,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
         final textoLimpo = line.text.replaceAll(RegExp(r'[^0-9]'), '');
         if (textoLimpo.length == 8 && cepEncontrado == null) {
           cepEncontrado = textoLimpo;
-        } else if (textoLimpo.length >= 1 && textoLimpo.length <= 5 && numeroEncontrado == null) {
+        } else if (textoLimpo.isNotEmpty && textoLimpo.length <= 5 && numeroEncontrado == null) {
           numeroEncontrado = textoLimpo;
         }
       }
