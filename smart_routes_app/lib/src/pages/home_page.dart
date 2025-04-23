@@ -177,12 +177,10 @@ class _HomePageState extends State<HomePage> {
       'longitude': _currentPosition!.longitude,
     };
 
-    final paradas = List<Map<String, double>>.from(
-      _stops.map((stop) => {
-        'latitude': stop['latitude'],
-        'longitude': stop['longitude'],
-      }),
-    );
+    final paradas = _stops.map((stop) => {
+      'latitude': (stop['latitude'] as num).toDouble(),
+      'longitude': (stop['longitude'] as num).toDouble(),
+    }).toList();
 
     RotaFatiadaService.iniciarNavegacaoFatiada(
       context: context,

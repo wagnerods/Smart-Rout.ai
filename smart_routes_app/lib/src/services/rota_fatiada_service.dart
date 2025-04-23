@@ -105,6 +105,7 @@ class RotaFatiadaService {
                       const SizedBox(height: 40),
                       ElevatedButton.icon(
                         onPressed: () async {
+                          print('Abrindo URL: $url');
                           if (await canLaunchUrl(url)) {
                             await launchUrl(url, mode: LaunchMode.externalApplication);
                           } else {
