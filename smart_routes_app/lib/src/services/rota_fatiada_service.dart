@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class RotaFatiadaService {
+  /// Inicia a navegação fatiada com múltiplas etapas
   static Future<void> iniciarNavegacaoFatiada({
     required BuildContext context,
     required Map<String, double> origem,
@@ -10,33 +11,31 @@ class RotaFatiadaService {
     if (paradas.isEmpty) return;
 
     final etapas = _dividirParadasEmEtapas(paradas, origem);
-
     await _navegarEtapa(context, etapas, 0);
   }
 
+  /// Divide paradas em lotes de até 10 pontos (limite do Google Maps)
   static List<List<Map<String, double>>> _dividirParadasEmEtapas(
     List<Map<String, double>> paradas,
     Map<String, double> origem,
   ) {
-    final List<List<Map<String, double>>> etapas = [];
+    final etapas = <List<Map<String, double>>>[];
     int i = 0;
     List<Map<String, double>> etapaAtual = [origem];
 
     while (i < paradas.length) {
-      etapaAtual.add(paradas[i]);
-      i++;
+      etapaAtual.add(paradas[i++]);
 
       if (etapaAtual.length == 10 || i == paradas.length) {
         etapas.add(List<Map<String, double>>.from(etapaAtual));
-        if (i < paradas.length) {
-          etapaAtual = [paradas[i - 1]];
-        }
+        if (i < paradas.length) etapaAtual = [paradas[i - 1]];
       }
     }
 
     return etapas;
   }
 
+  /// Gera o link para o Google Maps e mostra a tela de navegação
   static Future<void> _navegarEtapa(
     BuildContext context,
     List<List<Map<String, double>>> etapas,
@@ -48,19 +47,19 @@ class RotaFatiadaService {
     final origem = etapa.first;
     final destinos = etapa.sublist(1);
 
-    final String origin = '${origem['latitude']},${origem['longitude']}';
-    final String destination = '${destinos.last['latitude']},${destinos.last['longitude']}';
+    final originStr = '${origem['latitude']},${origem['longitude']}';
+    final destinationStr = '${destinos.last['latitude']},${destinos.last['longitude']}';
 
-    String waypoints = '';
-    if (destinos.length > 1) {
-      waypoints = destinos
-          .sublist(0, destinos.length - 1)
-          .map((d) => '${d['latitude']},${d['longitude']}')
-          .join('|');
-    }
+    final waypoints = destinos.length > 1
+        ? destinos.sublist(0, destinos.length - 1).map((d) => '${d['latitude']},${d['longitude']}').join('|')
+        : '';
 
     final url = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination&waypoints=$waypoints&travelmode=driving',
+      'https://www.google.com/maps/dir/?api=1'
+      '&origin=$originStr'
+      '&destination=$destinationStr'
+      '${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}'
+      '&travelmode=driving',
     );
 
     await _mostrarTelaNavegacao(
@@ -72,6 +71,7 @@ class RotaFatiadaService {
     );
   }
 
+  /// Mostra uma tela com opções de abrir o Google Maps e passar para a próxima entrega
   static Future<void> _mostrarTelaNavegacao({
     required BuildContext context,
     required int totalEtapas,
@@ -83,7 +83,7 @@ class RotaFatiadaService {
       PageRouteBuilder(
         opaque: false,
         transitionDuration: const Duration(milliseconds: 500),
-        pageBuilder: (context, animation, secondaryAnimation) {
+        pageBuilder: (context, animation, _) {
           return FadeTransition(
             opacity: animation,
             child: Scaffold(
@@ -107,6 +107,10 @@ class RotaFatiadaService {
                         onPressed: () async {
                           if (await canLaunchUrl(url)) {
                             await launchUrl(url, mode: LaunchMode.externalApplication);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Não foi possível abrir o Google Maps.')),
+                            );
                           }
                         },
                         icon: const Icon(Icons.navigation, size: 26),
