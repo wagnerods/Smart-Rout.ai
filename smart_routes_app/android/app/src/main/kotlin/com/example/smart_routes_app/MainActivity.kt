@@ -1,4 +1,4 @@
-package com.example.smart_routes_app
+package com.smartroutes.app
 
 import io.flutter.embedding.android.FlutterActivity
 
