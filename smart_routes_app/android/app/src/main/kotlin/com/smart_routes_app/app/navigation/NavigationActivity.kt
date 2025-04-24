@@ -4,9 +4,11 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.libraries.navigation.*
 import com.smartroutes.app.R
 
@@ -22,13 +24,18 @@ class NavigationActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_navigation)
+
+        findViewById<FloatingActionButton>(R.id.fab_back).setOnClickListener {
+            navigator.stopGuidance()
+            finish()
+        }        
+
         requestLocationPermissionAndInitSdk()
     }
 
     private fun requestLocationPermissionAndInitSdk() {
-        if (ContextCompat.checkSelfPermission(
-                this, android.Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED
         ) {
             locationPermissionGranted = true
             initializeNavigationSdk()
@@ -61,7 +68,7 @@ class NavigationActivity : AppCompatActivity() {
                 }
 
                 routingOptions = RoutingOptions().apply {
-                   val travelMode = RoutingOptions.TravelMode.DRIVING
+                    val travelMode = RoutingOptions.TravelMode.DRIVING
                 }
 
                 navigationFragment.getMapAsync { map ->
@@ -97,23 +104,30 @@ class NavigationActivity : AppCompatActivity() {
             val lat = it["latitude"] ?: 0.0
             val lng = it["longitude"] ?: 0.0
             Waypoint.builder()
-                .setLatLng(lat, lng) // Correto: passa dois Double diretamente
+                .setLatLng(lat, lng)
                 .build()
         }
 
-        val future = navigator.setDestinations(waypoints, routingOptions)
-        future.setOnResultListener { status ->
-            when (status) {
-                Navigator.RouteStatus.OK -> {
-                    navigator.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
-                    navigator.startGuidance()
+        navigator.clearDestinations()
+        navigator.stopGuidance()
+
+        // Esperar levemente para garantir sincronização (alternativa ao onReady de localização)
+        window.decorView.postDelayed({
+            val future = navigator.setDestinations(waypoints, routingOptions)
+
+            future.setOnResultListener { status ->
+                when (status) {
+                    Navigator.RouteStatus.OK -> {
+                        navigator.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
+                        navigator.startGuidance()
+                    }
+                    Navigator.RouteStatus.NO_ROUTE_FOUND -> toast("Nenhuma rota encontrada.")
+                    Navigator.RouteStatus.NETWORK_ERROR -> toast("Erro de rede ao buscar rota.")
+                    Navigator.RouteStatus.ROUTE_CANCELED -> toast("Rota cancelada.")
+                    else -> toast("Erro ao iniciar navegação: $status")
                 }
-                Navigator.RouteStatus.NO_ROUTE_FOUND -> toast("Nenhuma rota encontrada.")
-                Navigator.RouteStatus.NETWORK_ERROR -> toast("Erro de rede ao buscar rota.")
-                Navigator.RouteStatus.ROUTE_CANCELED -> toast("Rota cancelada.")
-                else -> toast("Erro ao iniciar navegação: $status")
             }
-        }
+        }, 500) // 500ms de delay
     }
 
     private fun toast(msg: String) {
