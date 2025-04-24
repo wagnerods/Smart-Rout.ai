@@ -19,11 +19,13 @@
         android:name="io.flutter.embedding.android.NormalTheme"
         android:resource="@style/NormalTheme" />
 
-        <!-- Google Maps API Key -->
-        <meta-data
-        android:name="com.google.android.geo.API_KEY"
-        android:value="AIzaSyDIzvJPnyFN8eUJGBiUR4KlOx6V2THwQkM" />
+        <activity
+            android:name="com.smartroutes.app.navigation.NavigationActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" 
+        />
 
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -40,10 +42,23 @@
             </intent-filter>
         </activity>
 
+        <!-- ✅ Adicione esta linha abaixo -->
+        
+
         <!-- Flutter Plugin Registrant -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Google Maps -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyCGqN-6bgfmt72wjdj8JnF8De4R1fL_XT8" />       
+
+        <!-- Fragmento necessário se você usar SupportNavigationFragment -->
+        <meta-data
+            android:name="com.google.android.libraries.navigation.API_KEY"
+            android:value="AIzaSyCGqN-6bgfmt72wjdj8JnF8De4R1fL_XT8" />    
 
     </application>
 

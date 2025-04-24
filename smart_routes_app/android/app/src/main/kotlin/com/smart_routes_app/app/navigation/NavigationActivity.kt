@@ -1,0 +1,130 @@
+package com.smartroutes.app.navigation
+
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.libraries.navigation.*
+import com.google.android.libraries.navigation.Navigator
+import com.smartroutes.app.R
+
+class NavigationActivity : AppCompatActivity() {
+
+    private lateinit var navigator: Navigator
+    private lateinit var navigationFragment: SupportNavigationFragment
+    private lateinit var routingOptions: RoutingOptions
+
+    private var locationPermissionGranted = false
+    private val LOCATION_PERMISSION_REQUEST_CODE = 1001
+    private val destinationPlaceId = "ChIJ3S-JXmauEmsRUcIaWtf4MzE" // Exemplo: Sydney Opera House
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_navigation)
+        requestLocationPermissionAndInitSdk()
+    }
+
+    private fun requestLocationPermissionAndInitSdk() {
+        if (ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            locationPermissionGranted = true
+            initializeNavigationSdk()
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),
+                LOCATION_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    private fun initializeNavigationSdk() {
+        if (!locationPermissionGranted) {
+            toast("Permissão de localização não concedida.")
+            return
+        }
+
+        NavigationApi.getNavigator(this, object : NavigationApi.NavigatorListener {
+            override fun onNavigatorReady(nav: Navigator) {
+                toast("Navegador pronto.")
+                navigator = nav
+
+                val fragment = supportFragmentManager.findFragmentById(R.id.navigation_fragment)
+                if (fragment is SupportNavigationFragment) {
+                    navigationFragment = fragment
+                } else {
+                    toast("Fragmento de navegação não encontrado.")
+                    return
+                }
+
+                routingOptions = RoutingOptions().apply {
+                    val travelMode = RoutingOptions.TravelMode.DRIVING
+                }
+
+                navigationFragment.getMapAsync { map ->
+                    map.followMyLocation(1)
+                }
+
+                navigateTo(destinationPlaceId)
+            }
+
+            override fun onError(errorCode: Int) {
+                val message = when (errorCode) {
+                    NavigationApi.ErrorCode.NOT_AUTHORIZED -> "Chave da API inválida ou não autorizada."
+                    NavigationApi.ErrorCode.TERMS_NOT_ACCEPTED -> "Termos de uso não aceitos."
+                    NavigationApi.ErrorCode.NETWORK_ERROR -> "Erro de rede."
+                    NavigationApi.ErrorCode.LOCATION_PERMISSION_MISSING -> "Permissão de localização ausente."
+                    else -> "Erro desconhecido: $errorCode"
+                }
+                toast(message)
+                Log.e("NavigationActivity", message)
+            }
+        })
+    }
+
+    private fun navigateTo(placeId: String) {
+        val destination = try {
+            Waypoint.builder().setPlaceIdString(placeId).build()
+        } catch (e: Waypoint.UnsupportedPlaceIdException) {
+            toast("Place ID não suportado.")
+            return
+        }
+
+        val resultFuture: ListenableResultFuture<Navigator.RouteStatus> =
+            navigator.setDestination(destination, routingOptions)
+
+        resultFuture.setOnResultListener { status ->
+            when (status) {
+                Navigator.RouteStatus.OK -> {
+                    navigator.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
+                    navigator.startGuidance()
+                }
+                Navigator.RouteStatus.NO_ROUTE_FOUND -> toast("Nenhuma rota encontrada.")
+                Navigator.RouteStatus.NETWORK_ERROR -> toast("Erro de rede ao buscar rota.")
+                Navigator.RouteStatus.ROUTE_CANCELED -> toast("Rota cancelada.")
+                else -> toast("Erro ao iniciar navegação: $status")
+            }
+        }
+    }
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            locationPermissionGranted = true
+            initializeNavigationSdk()
+        } else {
+            toast("Permissão de localização negada.")
+        }
+    }
+}

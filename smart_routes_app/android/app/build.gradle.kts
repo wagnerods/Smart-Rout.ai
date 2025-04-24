@@ -49,6 +49,10 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
 
+    implementation("com.google.android.libraries.navigation:navigation:6.2.0") {
+        exclude(group = "com.google.android.gms", module = "play-services-maps")
+    }      
+
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core-splashscreen:1.0.0")
