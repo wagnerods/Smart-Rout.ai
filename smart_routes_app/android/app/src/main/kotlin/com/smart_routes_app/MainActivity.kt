@@ -14,9 +14,10 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "startNavigation") {
-                val intent = Intent()
-                intent.setClassName(this, "com.smartroutes.app.navigation.NavigationActivity")
+            if (call.method == "startNavigationWithStops") {
+                val stops = call.argument<List<Map<String, Double>>>("stops")
+                val intent = Intent(this, NavigationActivity::class.java)
+                intent.putExtra("stops", ArrayList(stops))
                 startActivity(intent)
                 result.success(null)
             } else {

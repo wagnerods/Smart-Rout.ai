@@ -8,7 +8,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.libraries.navigation.*
-import com.google.android.libraries.navigation.Navigator
 import com.smartroutes.app.R
 
 class NavigationActivity : AppCompatActivity() {
@@ -19,7 +18,6 @@ class NavigationActivity : AppCompatActivity() {
 
     private var locationPermissionGranted = false
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
-    private val destinationPlaceId = "ChIJ3S-JXmauEmsRUcIaWtf4MzE" // Exemplo: Sydney Opera House
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,8 +49,8 @@ class NavigationActivity : AppCompatActivity() {
 
         NavigationApi.getNavigator(this, object : NavigationApi.NavigatorListener {
             override fun onNavigatorReady(nav: Navigator) {
-                toast("Navegador pronto.")
                 navigator = nav
+                toast("Navegador pronto.")
 
                 val fragment = supportFragmentManager.findFragmentById(R.id.navigation_fragment)
                 if (fragment is SupportNavigationFragment) {
@@ -63,14 +61,14 @@ class NavigationActivity : AppCompatActivity() {
                 }
 
                 routingOptions = RoutingOptions().apply {
-                    val travelMode = RoutingOptions.TravelMode.DRIVING
+                   val travelMode = RoutingOptions.TravelMode.DRIVING
                 }
 
                 navigationFragment.getMapAsync { map ->
                     map.followMyLocation(1)
                 }
 
-                navigateTo(destinationPlaceId)
+                handleIncomingStops()
             }
 
             override fun onError(errorCode: Int) {
@@ -87,18 +85,24 @@ class NavigationActivity : AppCompatActivity() {
         })
     }
 
-    private fun navigateTo(placeId: String) {
-        val destination = try {
-            Waypoint.builder().setPlaceIdString(placeId).build()
-        } catch (e: Waypoint.UnsupportedPlaceIdException) {
-            toast("Place ID não suportado.")
+    private fun handleIncomingStops() {
+        val stops = intent.getSerializableExtra("stops") as? ArrayList<HashMap<String, Double>>
+        if (stops.isNullOrEmpty()) {
+            toast("Nenhuma parada recebida.")
+            finish()
             return
         }
 
-        val resultFuture: ListenableResultFuture<Navigator.RouteStatus> =
-            navigator.setDestination(destination, routingOptions)
+        val waypoints = stops.map {
+            val lat = it["latitude"] ?: 0.0
+            val lng = it["longitude"] ?: 0.0
+            Waypoint.builder()
+                .setLatLng(lat, lng) // Correto: passa dois Double diretamente
+                .build()
+        }
 
-        resultFuture.setOnResultListener { status ->
+        val future = navigator.setDestinations(waypoints, routingOptions)
+        future.setOnResultListener { status ->
             when (status) {
                 Navigator.RouteStatus.OK -> {
                     navigator.setAudioGuidance(Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE)
