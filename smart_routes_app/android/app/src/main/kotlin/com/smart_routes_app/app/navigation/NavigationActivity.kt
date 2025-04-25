@@ -11,6 +11,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.libraries.navigation.*
 import com.smartroutes.app.R
 import io.flutter.plugin.common.MethodChannel
+import android.content.Intent
 
 class NavigationActivity : AppCompatActivity() {
 
@@ -142,25 +143,13 @@ class NavigationActivity : AppCompatActivity() {
     }
 
     private fun finishWithResult() {
-        MethodChannel(
-            FlutterEngineCache
-                .getInstance()
-                .get("flutter")!!.dartExecutor.binaryMessenger,
-            "com.smartroutes.navigation"
-        ).invokeMethod("navigationEnded", null)
-
+        val intent = Intent("com.smartroutes.navigationEnded")
+        sendBroadcast(intent)
         finish()
     }
 
     override fun onStop() {
         super.onStop()
-        if (::navigator.isInitialized) {
-            try {
-                navigator.stopGuidance()
-            } catch (e: Exception) {
-                Log.w("NavigationActivity", "Erro ao encerrar guia: ${e.message}")
-            }
-        }
         finishWithResult()
     }
 

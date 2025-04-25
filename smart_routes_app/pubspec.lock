@@ -302,6 +302,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
+  flutter_broadcast_receiver:
+    dependency: "direct main"
+    description:
+      name: flutter_broadcast_receiver
+      sha256: "710f3be5b55098bb85dc4eca3f5a33c007f0849a153f0aa338929ff4e5d36c1b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0+2"
   flutter_google_places_hoc081098:
     dependency: "direct main"
     description:

@@ -37,16 +37,17 @@ class _HomePageState extends State<HomePage> {
     _mapController = MapController();
     _getCurrentLocation();
     _loadProfileImage();
-      platform.setMethodCallHandler((call) async {
-        if (call.method == "navigationEnded") {
-          _panelController.close();
-          setState(() {
-            _stops.clear();
-            _proximaParada = null;
-          });
-        }
-      });
-    }
+    const navigationEndChannel = EventChannel('com.smartroutes/navigation_events');
+      navigationEndChannel.receiveBroadcastStream().listen((event) {
+      if (event == 'navigationEnded') {
+        // resetar rotas, collapsar painel, etc
+        _stops.clear();
+        _proximaParada = null;
+        _panelController.animatePanelToSnapPoint();
+        setState(() {});
+      }
+    });      
+  }
   
   void _onNavigationEnded() {
     // Exemplo: limpa rotas e colapsa painel
