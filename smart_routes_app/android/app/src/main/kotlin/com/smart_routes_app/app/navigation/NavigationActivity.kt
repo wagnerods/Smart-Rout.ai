@@ -4,13 +4,13 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.libraries.navigation.*
 import com.smartroutes.app.R
+import io.flutter.plugin.common.MethodChannel
 
 class NavigationActivity : AppCompatActivity() {
 
@@ -21,14 +21,18 @@ class NavigationActivity : AppCompatActivity() {
     private var locationPermissionGranted = false
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
 
+    companion object {
+        private const val CHANNEL = "com.smartroutes.navigation"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_navigation)
 
         findViewById<FloatingActionButton>(R.id.fab_back).setOnClickListener {
             navigator.stopGuidance()
-            finish()
-        }        
+            finishWithResult()
+        }
 
         requestLocationPermissionAndInitSdk()
     }
@@ -56,6 +60,10 @@ class NavigationActivity : AppCompatActivity() {
 
         NavigationApi.getNavigator(this, object : NavigationApi.NavigatorListener {
             override fun onNavigatorReady(nav: Navigator) {
+                if (::navigator.isInitialized) {
+                    navigator.stopGuidance()
+                    navigator.clearDestinations()
+                }
                 navigator = nav
                 toast("Navegador pronto.")
 
@@ -111,7 +119,6 @@ class NavigationActivity : AppCompatActivity() {
         navigator.clearDestinations()
         navigator.stopGuidance()
 
-        // Esperar levemente para garantir sincronização (alternativa ao onReady de localização)
         window.decorView.postDelayed({
             val future = navigator.setDestinations(waypoints, routingOptions)
 
@@ -127,11 +134,40 @@ class NavigationActivity : AppCompatActivity() {
                     else -> toast("Erro ao iniciar navegação: $status")
                 }
             }
-        }, 500) // 500ms de delay
+        }, 800) // Delay aumentado para 800ms
     }
 
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
+    private fun finishWithResult() {
+        val flutterEngine = io.flutter.embedding.engine.FlutterEngineCache
+            .getInstance()
+            .get("main_engine") // mesmo ID usado no Flutter
+
+        if (flutterEngine != null) {
+            MethodChannel(
+                flutterEngine.dartExecutor.binaryMessenger,
+                "com.smartroutes.navigation"
+            ).invokeMethod("navigationEnded", null)
+        } else {
+            Log.w("NavigationActivity", "FlutterEngine não encontrado no cache.")
+        }
+
+        finish()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (::navigator.isInitialized) {
+            try {
+                navigator.stopGuidance()
+            } catch (e: Exception) {
+                Log.w("NavigationActivity", "Erro ao encerrar guia: ${e.message}")
+            }
+        }
+        finishWithResult()
     }
 
     override fun onRequestPermissionsResult(
