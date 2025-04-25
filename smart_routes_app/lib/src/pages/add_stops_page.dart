@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:smart_routes_app/sevices/geocoding_service.dart';
 import 'package:smart_routes_app/sevices/viacep_service.dart';
 
@@ -21,6 +22,8 @@ class _AddStopsPageState extends State<AddStopsPage> {
   final Color mainButtonColor = const Color(0xFF64B5F6);
   late List<Map<String, dynamic>> _stops;
   bool _isLoading = false;
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
 
   @override
   void initState() {
@@ -33,6 +36,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
         'longitude': stop['longitude'],
       };
     }).toList();
+    _speech = stt.SpeechToText();
   }
 
   Future<void> _buscarCep(String cep, {String? numeroResidencia}) async {
@@ -49,7 +53,7 @@ class _AddStopsPageState extends State<AddStopsPage> {
 
     if (endereco != null) {
       String enderecoCompleto =
-          '${endereco['logradouro']}${numeroResidencia != null ? ", $numeroResidencia" : ''}, ${endereco['bairro']}, ${endereco['localidade']} - ${endereco['uf']}';
+          '${endereco['logradouro']}${numeroResidencia != null ? ", \$numeroResidencia" : ''}, ${endereco['bairro']}, ${endereco['localidade']} - ${endereco['uf']}';
 
       final location = await GeocodingService.buscarCoordenadas(enderecoCompleto);
 
@@ -75,40 +79,6 @@ class _AddStopsPageState extends State<AddStopsPage> {
     }
 
     setState(() => _isLoading = false);
-  }
-  Future<void> _editarParada(int index) async {
-    TextEditingController enderecoController = TextEditingController(text: _stops[index]['endereco']);
-
-    bool? confirmado = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Editar Endereço'),
-        content: TextField(
-          controller: enderecoController,
-          decoration: const InputDecoration(labelText: 'Novo Endereço'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Salvar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmado == true && enderecoController.text.trim().isNotEmpty) {
-      setState(() {
-        _stops[index]['endereco'] = enderecoController.text.trim();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Endereço atualizado com sucesso!')),
-      );
-    }
   }
 
   Future<void> _tirarFotoEOCR() async {
@@ -147,12 +117,27 @@ class _AddStopsPageState extends State<AddStopsPage> {
     }
   }
 
+  Future<void> _startListening() async {
+    bool available = await _speech.initialize();
+    if (available) {
+      setState(() => _isListening = true);
+      _speech.listen(onResult: (result) {
+        final text = result.recognizedWords.replaceAll(RegExp(r'[^0-9]'), '');
+        if (text.length == 8) {
+          _cepController.text = text;
+          _speech.stop();
+          setState(() => _isListening = false);
+        }
+      });
+    }
+  }
+
   Future<bool> _mostrarDialogConfirmacao(String cep, String? numero) async {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Confirmação'),
-            content: Text('Detectei o CEP: $cep\nNúmero: ${numero ?? "não detectado"}\nDeseja adicionar?'),
+            content: Text('Detectei o CEP: \$cep\nNúmero: \${numero ?? "não detectado"}\nDeseja adicionar?'),
             actions: [
               TextButton(
                 child: const Text('Cancelar'),
@@ -166,6 +151,150 @@ class _AddStopsPageState extends State<AddStopsPage> {
           ),
         ) ??
         false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Adicionar Paradas')),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: _cepController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        hintText: 'Type to add a stop',
+                        border: InputBorder.none,
+                      ),
+                      onSubmitted: (value) => _buscarCep(value.trim()),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.qr_code_scanner),
+                    onPressed: _tirarFotoEOCR,
+                  ),
+                  IconButton(
+                    icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+                    onPressed: _startListening,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _isLoading ? const LinearProgressIndicator() : Container(),
+            const SizedBox(height: 12),
+            _stops.isEmpty
+                ? const Column(
+                    children: [
+                      Icon(Icons.add_location_alt, size: 48, color: Colors.grey),
+                      SizedBox(height: 8),
+                      Text('Add new stops, or find stops in this route'),
+                    ],
+                  )
+                : Expanded(
+                    child: ListView.builder(
+                      itemCount: _stops.length,
+                      itemBuilder: (context, index) {
+                        final stop = _stops[index];
+                        return ListTile(
+                          leading: const Icon(Icons.location_on),
+                          title: Text(stop['endereco'] ?? 'Sem endereço disponível'),
+                          subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _editarParada(index),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _stops.isEmpty
+                  ? null
+                  : () {
+                      setState(() => _stops.clear());
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Todas as paradas foram removidas!')),
+                      );
+                    },
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('Limpar Paradas'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 6,
+                shadowColor: Colors.black45,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _salvarEOtimizar,
+              icon: const Icon(Icons.map),
+              label: const Text('Salvar e Otimizar Rota'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: mainButtonColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 6,
+                shadowColor: Colors.black45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editarParada(int index) async {
+    TextEditingController enderecoController = TextEditingController(text: _stops[index]['endereco']);
+
+    bool? confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Endereço'),
+        content: TextField(
+          controller: enderecoController,
+          decoration: const InputDecoration(labelText: 'Novo Endereço'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado == true && enderecoController.text.trim().isNotEmpty) {
+      setState(() {
+        _stops[index]['endereco'] = enderecoController.text.trim();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Endereço atualizado com sucesso!')),
+      );
+    }
   }
 
   double _deg2rad(double deg) => deg * (pi / 180);
@@ -227,130 +356,14 @@ class _AddStopsPageState extends State<AddStopsPage> {
     try {
       final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       final rotaOtimizada = _otimizarParadas(_stops, position.latitude, position.longitude);
-      Navigator.pop(context, rotaOtimizada);
+      Navigator.pop(context, {'rota': rotaOtimizada, 'expandir': true});
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao salvar ou otimizar: $e')),
+        SnackBar(content: Text('Erro ao salvar ou otimizar: \$e')),
       );
     } finally {
       setState(() => _isLoading = false);
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Adicionar Paradas'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _cepController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Digite o CEP (sem traço)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _isLoading
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator())
-                    : Row(
-                        children: [
-                          ElevatedButton(
-                            onPressed: () => _buscarCep(_cepController.text.trim()),
-                            child: const Text('Adicionar'),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            onPressed: _tirarFotoEOCR,
-                            icon: const Icon(Icons.camera_alt),
-                          ),
-                        ],
-                      ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _stops.length,
-                itemBuilder: (context, index) {
-                  final stop = _stops[index];
-                  return Dismissible(
-                    key: Key('${stop['cep']}_${index.toString()}'),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      color: Colors.redAccent,
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    onDismissed: (_) {
-                      setState(() {
-                        _stops.removeAt(index);
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Parada removida!')),
-                      );
-                    },
-                    child: ListTile(
-                      leading: const Icon(Icons.location_on),
-                      title: Text(stop['endereco'] ?? 'Sem endereço disponível'),
-                      subtitle: Text('Lat: ${stop['latitude']}, Lng: ${stop['longitude']}'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _editarParada(index),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: _stops.isEmpty
-                  ? null
-                  : () {
-                      setState(() => _stops.clear());
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Todas as paradas foram removidas!')),
-                      );
-                    },
-              icon: const Icon(Icons.delete_forever),
-              label: const Text('Limpar Paradas'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 40),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 6,
-                shadowColor: Colors.black45,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _salvarEOtimizar,
-              icon: const Icon(Icons.map),
-              label: const Text('Salvar e Otimizar Rota'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: mainButtonColor,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 40),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 6,
-                shadowColor: Colors.black45,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

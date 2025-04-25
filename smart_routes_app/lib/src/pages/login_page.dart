@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -9,6 +12,8 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final nameController = TextEditingController();
+  File? _profileImage;
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
@@ -24,6 +29,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       if (!isLogin) {
+        await _saveUserData();
         if (passwordController.text != confirmPasswordController.text) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('As senhas não conferem.'))
@@ -72,6 +78,23 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => isLoading = false);
     }
   }
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      setState(() => _profileImage = File(pickedFile.path));
+    }
+  }
+
+  Future<void> _saveUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_name', nameController.text.trim());
+
+    if (_profileImage != null) {
+      await prefs.setString('profile_image_path', _profileImage!.path);
+    }
+  }
 
   Widget passwordChecklist() {
     final password = passwordController.text;
@@ -113,6 +136,26 @@ class _LoginPageState extends State<LoginPage> {
                 height: 200,
                 scale: 0.8,
               ),
+              if (!isLogin) ...[
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: CircleAvatar(
+                    radius: 40,
+                    backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                    backgroundColor: Colors.grey[200],
+                    child: _profileImage == null ? const Icon(Icons.camera_alt, size: 32, color: Colors.grey) : null,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome Completo',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               const SizedBox(height: 24),
               TextField(
                 controller: emailController,
@@ -131,20 +174,7 @@ class _LoginPageState extends State<LoginPage> {
                   labelText: 'Senha',
                   border: OutlineInputBorder(),
                 ),
-              ),
-              if (!isLogin) ...[
-                const SizedBox(height: 8),
-                passwordChecklist(),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: confirmPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirmar Senha',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
+              ),              
               const SizedBox(height: 24),
               isLoading
                   ? const CircularProgressIndicator()
