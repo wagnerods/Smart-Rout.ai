@@ -19,6 +19,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // 🔄 VARIÁVEIS DE CONTROLE
   bool _isLoadingNavigation = false;
   File? _localImage;
   List<Map<String, dynamic>> _stops = [];
@@ -36,6 +37,24 @@ class _HomePageState extends State<HomePage> {
     _mapController = MapController();
     _getCurrentLocation();
     _loadProfileImage();
+      platform.setMethodCallHandler((call) async {
+        if (call.method == "navigationEnded") {
+          _panelController.close();
+          setState(() {
+            _stops.clear();
+            _proximaParada = null;
+          });
+        }
+      });
+    }
+  
+  void _onNavigationEnded() {
+    // Exemplo: limpa rotas e colapsa painel
+    setState(() {
+      _stops.clear();
+      _proximaParada = null;
+    });
+    _panelController.close(); // se estiver usando sliding_up_panel
   }
 
   Future<void> _loadProfileImage() async {

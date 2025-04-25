@@ -142,18 +142,12 @@ class NavigationActivity : AppCompatActivity() {
     }
 
     private fun finishWithResult() {
-        val flutterEngine = io.flutter.embedding.engine.FlutterEngineCache
-            .getInstance()
-            .get("main_engine") // mesmo ID usado no Flutter
-
-        if (flutterEngine != null) {
-            MethodChannel(
-                flutterEngine.dartExecutor.binaryMessenger,
-                "com.smartroutes.navigation"
-            ).invokeMethod("navigationEnded", null)
-        } else {
-            Log.w("NavigationActivity", "FlutterEngine não encontrado no cache.")
-        }
+        MethodChannel(
+            FlutterEngineCache
+                .getInstance()
+                .get("flutter")!!.dartExecutor.binaryMessenger,
+            "com.smartroutes.navigation"
+        ).invokeMethod("navigationEnded", null)
 
         finish()
     }
