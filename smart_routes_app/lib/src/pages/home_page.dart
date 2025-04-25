@@ -149,16 +149,28 @@ class _HomePageState extends State<HomePage> {
     }).toList();
 
     try {
-       await Future.delayed(const Duration(seconds: 2));
-        await platform.invokeMethod('startNavigationWithStops', {
-          'stops': [origem, ...paradas],
-        });
-      } on PlatformException catch (e) {
-        debugPrint("Erro ao iniciar navegação embutida: ${e.message}");
-      } finally {
-      if (mounted) {
-        setState(() => _isLoadingNavigation = false);
-      }
+      // 🔄 Delay para garantir estabilidade do GPS
+      await Future.delayed(const Duration(seconds: 2));
+
+      // 🔄 (Opcional) reinicializar localização antes da chamada
+      final freshPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+
+      final novaOrigem = {
+        'latitude': freshPosition.latitude,
+        'longitude': freshPosition.longitude,
+      };
+
+      await platform.invokeMethod('startNavigationWithStops', {
+        'stops': [novaOrigem, ...paradas],
+      });
+    } on PlatformException catch (e) {
+      debugPrint("Erro ao iniciar navegação embutida: ${e.message}");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Falha ao iniciar rota: ${e.message}")),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingNavigation = false);
     }
   }
 
