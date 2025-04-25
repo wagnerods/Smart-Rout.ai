@@ -149,13 +149,16 @@ class _HomePageState extends State<HomePage> {
     }).toList();
 
     try {
+       await Future.delayed(const Duration(seconds: 2));
         await platform.invokeMethod('startNavigationWithStops', {
           'stops': [origem, ...paradas],
         });
       } on PlatformException catch (e) {
         debugPrint("Erro ao iniciar navegação embutida: ${e.message}");
       } finally {
-      if (mounted) setState(() => _isLoadingNavigation = false);
+      if (mounted) {
+        setState(() => _isLoadingNavigation = false);
+      }
     }
   }
 
